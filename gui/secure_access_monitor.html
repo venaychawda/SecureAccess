@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Access Lab — ECU Monitor</title>
+<style>
+/* ── Reset & base ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+:root {
+  --blue:   #1A73E8;
+  --green:  #1E8E3E;
+  --red:    #D93025;
+  --amber:  #F9AB00;
+  --grey:   #5F6368;
+  --bg:     #F8F9FA;
+  --panel:  #FFFFFF;
+  --border: #DADCE0;
+  --text:   #202124;
+  --text2:  #5F6368;
+  --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+  --sans: Inter, system-ui, -apple-system, sans-serif;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+}
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────────── */
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+header h1 { font-size: 15px; font-weight: 600; flex: 1; }
+header h1 span { color: var(--blue); }
+.conn-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 10px;
+  border-radius: 12px; letter-spacing: .4px;
+}
+.conn-badge.connected    { background: #E6F4EA; color: var(--green); }
+.conn-badge.reconnecting { background: #FEF7E0; color: var(--amber); }
+.conn-badge.disconnected { background: #FCE8E6; color: var(--red); }
+
+/* ── Main layout ───────────────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Sidebar (controls) */
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  min-height: 0;
+  padding: 12px 0;
+}
+.sidebar-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-section:last-child { border-bottom: none; }
+.sidebar h2 { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; }
+
+/* Control buttons */
+.btn-group { display: flex; flex-direction: column; gap: 6px; }
+.btn-group.row { flex-direction: row; flex-wrap: wrap; }
+button {
+  font-family: var(--sans); font-size: 12px; font-weight: 500;
+  padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--text); cursor: pointer;
+  transition: background .15s, border-color .15s;
+  white-space: nowrap;
+}
+button:hover { background: #F1F3F4; }
+button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+button.primary:hover { background: #1557B0; }
+button.danger  { background: var(--red);  color: #fff; border-color: var(--red); }
+button.danger:hover  { background: #A50E0E; }
+button.warn    { background: var(--amber); color: #fff; border-color: var(--amber); }
+button.warn:hover { background: #E37400; }
+button.session-active { border-color: var(--blue); color: var(--blue); background: #E8F0FE; }
+
+select, input[type=text] {
+  font-family: var(--mono); font-size: 11px;
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: #fff; color: var(--text);
+  margin-bottom: 6px;
+}
+label { font-size: 11px; color: var(--text2); display: block; margin-bottom: 3px; }
+.radio-group { display: flex; gap: 12px; margin-bottom: 8px; }
+.radio-group label { display: flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); margin: 0; }
+.sim-note { font-size: 10px; color: var(--amber); font-weight: 600; margin-bottom: 6px; }
+
+/* ── Panels grid ───────────────────────────────────────────────────────── */
+.panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.panel-header h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--text2); flex: 1; }
+.panel-body { padding: 12px 14px; overflow-y: auto; flex: 1; min-height: 0; }
+
+/* ── Panel 1: ECU State ────────────────────────────────────────────────── */
+.state-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #F1F3F4; }
+.state-row:last-child { border-bottom: none; }
+.state-label { font-size: 11px; color: var(--text2); font-weight: 500; }
+
+.badge {
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; letter-spacing: .4px;
+}
+.badge.default    { background: #F1F3F4; color: var(--grey); }
+.badge.extended   { background: #E8F0FE; color: var(--blue); }
+.badge.programming{ background: #E6F4EA; color: var(--green); }
+.badge.none       { background: #F1F3F4; color: var(--grey); }
+.badge.read_only  { background: #F1F3F4; color: var(--grey); }
+.badge.calibration{ background: #E8F0FE; color: var(--blue); }
+.badge.ecu_programming { background: #E6F4EA; color: var(--green); }
+.badge.engineering     { background: #FEF7E0; color: #C47200; }
+.badge.full_access     { background: #E6F4EA; color: var(--green); }
+.badge.sw27 { background: #E8F0FE; color: var(--blue); }
+.badge.sw29 { background: #E6F4EA; color: var(--green); }
+.badge.ok   { background: #E6F4EA; color: var(--green); }
+.badge.err  { background: #FCE8E6; color: var(--red); }
+.badge.warn { background: #FEF7E0; color: #C47200; }
+
+.timer-bar-wrap { margin: 8px 0 4px; }
+.timer-label { font-size: 10px; color: var(--text2); display: flex; justify-content: space-between; margin-bottom: 3px; }
+.timer-bar { height: 6px; border-radius: 3px; background: #E8F0FE; overflow: hidden; }
+.timer-fill { height: 100%; border-radius: 3px; transition: width .5s linear, background .5s; background: var(--green); }
+
+@keyframes tamper-flash {
+  0%, 100% { background: #FCE8E6; }
+  50%       { background: var(--red); }
+}
+.tamper-active { animation: tamper-flash .4s 5; }
+
+/* ── Panel 2: Auth Status ──────────────────────────────────────────────── */
+.auth-level-row {
+  padding: 8px 0; border-bottom: 1px solid #F1F3F4;
+}
+.auth-level-row:last-child { border-bottom: none; }
+.auth-level-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.auth-level-name { font-size: 11px; font-weight: 600; font-family: var(--mono); }
+.attempt-pips { display: flex; gap: 3px; }
+.pip { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border); background: #F1F3F4; }
+.pip.used { background: var(--red); border-color: var(--red); }
+.delay-bar { height: 3px; background: #E8F0FE; border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.delay-fill { height: 100%; border-radius: 2px; background: var(--amber); transition: width .5s linear; }
+.lockout-badge { font-size: 10px; background: #FCE8E6; color: var(--red); padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+
+/* ── Panel 3: Message Flow ─────────────────────────────────────────────── */
+.filter-bar { display: flex; gap: 4px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.filter-btn { font-size: 10px; padding: 3px 8px; border-radius: 10px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-family: var(--mono); }
+.filter-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+.msg-log { font-family: var(--mono); font-size: 11px; overflow-y: auto; flex: 1; min-height: 0; }
+.msg-row {
+  display: grid;
+  grid-template-columns: 70px 24px 40px 40px 1fr;
+  gap: 6px;
+  padding: 3px 14px;
+  align-items: center;
+  border-bottom: 1px solid #F8F9FA;
+}
+.msg-row:hover { background: #F8F9FA; }
+.msg-ts   { color: var(--text2); font-size: 10px; }
+.msg-dir  { text-align: center; font-size: 13px; }
+.msg-dir.out { color: var(--blue); }
+.msg-dir.in  { color: var(--green); }
+.msg-svc  { font-weight: 600; }
+.msg-sub  { color: var(--text2); }
+.msg-result.pos { color: var(--green); }
+.msg-result.neg { color: var(--red); }
+.msg-result.req { color: var(--grey); }
+.msg-row.nrc  { background: #FFF8F7; }
+.msg-row.pos  { background: #F8FFF9; }
+
+/* ── Panel 4: Audit Log ────────────────────────────────────────────────── */
+.audit-log { font-family: var(--mono); font-size: 11px; overflow-y: auto; flex: 1; min-height: 0; }
+.audit-row { padding: 4px 14px; border-bottom: 1px solid #F8F9FA; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.audit-row:hover { background: #F8F9FA; }
+.audit-ts   { color: var(--text2); font-size: 10px; white-space: nowrap; }
+.audit-type { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
+.audit-type.auth_success   { background: #E6F4EA; color: var(--green); }
+.audit-type.auth_failure   { background: #FCE8E6; color: var(--red); }
+.audit-type.session_start  { background: #E8F0FE; color: var(--blue); }
+.audit-type.session_end    { background: #F1F3F4; color: var(--grey); }
+.audit-type.session_timeout { background: #FEF7E0; color: #C47200; }
+.audit-type.session_tamper_reset { background: #FCE8E6; color: var(--red); }
+.audit-type.lockout_triggered { background: #FCE8E6; color: var(--red); }
+.audit-type.lockout_expired   { background: #E6F4EA; color: var(--green); }
+.audit-type.replay_detected   { background: #FCE8E6; color: var(--red); }
+.audit-type.deauthenticate    { background: #FEF7E0; color: #C47200; }
+.audit-level { font-size: 10px; color: var(--text2); }
+.chain-indicator { margin-left: auto; font-size: 10px; }
+.chain-ok   { color: var(--green); font-weight: 700; }
+.chain-fail { color: var(--red);   font-weight: 700; }
+
+.chain-status-bar { padding: 6px 14px; border-bottom: 1px solid var(--border); font-size: 11px; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ── Toast notification ────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: #fff; padding: 8px 18px; border-radius: 20px;
+  font-size: 12px; font-weight: 500; pointer-events: none;
+  opacity: 0; transition: opacity .3s; z-index: 200; white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+#toast.ok   { background: var(--green); }
+#toast.err  { background: var(--red); }
+
+/* ── Scrollbars ────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Empty state ───────────────────────────────────────────────────────── */
+.empty-state { color: var(--text2); font-size: 12px; text-align: center; padding: 24px 0; }
+
+/* ── Responsive collapse at narrow width ──────────────────────────────── */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { grid-row: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .panels { grid-template-columns: 1fr; grid-template-rows: repeat(4, 280px); }
+}
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header>
+  <h1>Secure Access Lab &mdash; <span>ECU Monitor</span></h1>
+  <span class="conn-badge disconnected" id="connBadge">DISCONNECTED</span>
+</header>
+
+<!-- ── Main layout ─────────────────────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- ── Sidebar (controls) ────────────────────────────────────────────── -->
+  <nav class="sidebar">
+
+    <div class="sidebar-section">
+      <h2>Session Control</h2>
+      <div class="btn-group row">
+        <button id="btnDefault"  onclick="sendCmd({cmd:'session',target:'default'})">Default</button>
+        <button id="btnExtended" onclick="sendCmd({cmd:'session',target:'extended'})">Extended</button>
+        <button id="btnProgram"  onclick="sendCmd({cmd:'session',target:'programming'})">Programming</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>0x27 SecurityAccess</h2>
+      <label>Access Level</label>
+      <select id="sa27Level">
+        <option value="calibration">CALIBRATION (0x01/0x02)</option>
+        <option value="ecu_programming">ECU_PROGRAMMING (0x03/0x04)</option>
+      </select>
+      <div class="btn-group">
+        <button class="primary" onclick="sendCmd({cmd:'0x27_seed',level:document.getElementById('sa27Level').value})">Request Seed</button>
+      </div>
+      <label style="margin-top:8px">Key (hex — auto-filled, editable for negative tests)</label>
+      <input type="text" id="keyHex" placeholder="awaiting seed…" spellcheck="false">
+      <button class="primary" onclick="doSendKey()" style="width:100%">Send Key</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>0x29 Authentication</h2>
+      <div class="radio-group">
+        <label><input type="radio" name="authMode" value="unidirectional" checked> Unidirectional</label>
+        <label><input type="radio" name="authMode" value="bidirectional"> Bidirectional</label>
+      </div>
+      <div class="btn-group">
+        <button class="primary" onclick="sendCmd({cmd:'0x29_auth',mode:document.querySelector('input[name=authMode]:checked').value})">Authenticate</button>
+        <button onclick="sendCmd({cmd:'0x29_deauth'})">deAuthenticate</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>Simulation Injection</h2>
+      <p class="sim-note">⚠ Sim-only test controls</p>
+      <div class="btn-group">
+        <button class="danger" onclick="sendCmd({cmd:'inject_tamper'})">Inject Tamper Event</button>
+        <button class="warn"   onclick="sendCmd({cmd:'inject_wrong_key',level:document.getElementById('sa27Level').value})">Inject Wrong Key (→ NRC 0x35)</button>
+        <button class="warn"   onclick="sendCmd({cmd:'inject_expired_cert'})">Inject Expired Cert (→ NRC 0x75)</button>
+        <button class="warn"   onclick="sendCmd({cmd:'inject_replay_nonce'})">Inject Replay Nonce (→ NRC 0x24)</button>
+        <button class="danger" onclick="sendCmd({cmd:'power_cycle'})">Simulate Power Cycle</button>
+      </div>
+    </div>
+
+  </nav>
+
+  <!-- ── Four panels ───────────────────────────────────────────────────── -->
+  <div class="panels">
+
+    <!-- Panel 1: ECU State -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>ECU State</h3>
+      </div>
+      <div class="panel-body">
+        <div class="state-row">
+          <span class="state-label">Session</span>
+          <span class="badge default" id="sessionBadge">DEFAULT</span>
+        </div>
+        <div class="state-row">
+          <span class="state-label">Access Level</span>
+          <span class="badge none" id="accessBadge">NONE</span>
+        </div>
+        <div class="state-row">
+          <span class="state-label">Auth Mechanism</span>
+          <span class="badge none" id="mechBadge">NONE</span>
+        </div>
+        <div class="state-row">
+          <span class="state-label">Tamper Flag</span>
+          <span class="badge none" id="tamperBadge">OFF</span>
+        </div>
+
+        <div class="timer-bar-wrap">
+          <div class="timer-label">
+            <span>Session Timer</span>
+            <span id="timerText">—</span>
+          </div>
+          <div class="timer-bar">
+            <div class="timer-fill" id="timerFill" style="width:100%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 2: Auth Status -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Auth Status</h3>
+      </div>
+      <div class="panel-body" id="authStatusBody">
+        <!-- built by JS -->
+      </div>
+    </div>
+
+    <!-- Panel 3: Message Flow -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>UDS Message Flow</h3>
+        <span id="msgCount" style="font-size:10px;color:var(--text2)">0 msgs</span>
+      </div>
+      <div class="filter-bar" id="msgFilterBar">
+        <button class="filter-btn active" data-filter="ALL"      onclick="setMsgFilter('ALL',this)">ALL</button>
+        <button class="filter-btn"        data-filter="0x10"     onclick="setMsgFilter('0x10',this)">0x10</button>
+        <button class="filter-btn"        data-filter="0x27"     onclick="setMsgFilter('0x27',this)">0x27</button>
+        <button class="filter-btn"        data-filter="0x29"     onclick="setMsgFilter('0x29',this)">0x29</button>
+        <button class="filter-btn"        data-filter="NRC"      onclick="setMsgFilter('NRC',this)">NRC ONLY</button>
+      </div>
+      <div class="msg-log" id="msgLog">
+        <div class="empty-state">Server offline — run: <code style="font-family:var(--mono);font-size:10px">python -m sim.protocol.uds_server</code></div>
+      </div>
+    </div>
+
+    <!-- Panel 4: Audit Log -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Audit Log</h3>
+        <span id="auditCount" style="font-size:10px;color:var(--text2)">0 entries</span>
+      </div>
+      <div class="chain-status-bar">
+        <span style="font-size:10px;color:var(--text2)">Hash chain:</span>
+        <span id="chainStatus" class="chain-ok">— awaiting entries —</span>
+      </div>
+      <div class="filter-bar">
+        <button class="filter-btn active" data-afilter="ALL"     onclick="setAuditFilter('ALL',this)">ALL</button>
+        <button class="filter-btn"        data-afilter="AUTH"    onclick="setAuditFilter('AUTH',this)">AUTH</button>
+        <button class="filter-btn"        data-afilter="SESSION" onclick="setAuditFilter('SESSION',this)">SESSION</button>
+        <button class="filter-btn"        data-afilter="TAMPER"  onclick="setAuditFilter('TAMPER',this)">TAMPER</button>
+        <button class="filter-btn"        data-afilter="LOCKOUT" onclick="setAuditFilter('LOCKOUT',this)">LOCKOUT</button>
+      </div>
+      <div class="audit-log" id="auditLog">
+        <div class="empty-state">Server offline — run: <code style="font-family:var(--mono);font-size:10px">python -m sim.protocol.uds_server</code></div>
+      </div>
+    </div>
+
+  </div><!-- .panels -->
+</div><!-- .layout -->
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+const MAX_TIMEOUT = 300; // seconds — from ecu_policy.json
+const MAX_ATTEMPTS = 3;
+
+const state = {
+  session: 'default',
+  accessLevel: null,
+  mechUsed: null,
+  timerRemaining: MAX_TIMEOUT,
+  tamper: false,
+  attempts: {
+    CALIBRATION: 0, ECU_PROGRAMMING: 0, ENGINEERING: 0, FULL_ACCESS: 0
+  },
+  locked: {
+    CALIBRATION: false, ECU_PROGRAMMING: false, ENGINEERING: false, FULL_ACCESS: false
+  },
+  lockoutRemaining: {
+    CALIBRATION: 0, ECU_PROGRAMMING: 0, ENGINEERING: 0, FULL_ACCESS: 0
+  },
+  delayRemaining: {
+    CALIBRATION: 0, ECU_PROGRAMMING: 0, ENGINEERING: 0, FULL_ACCESS: 0
+  }
+};
+
+const messages   = [];   // { ts, direction, service, sub, result, data }
+const auditEntries = []; // raw audit JSON entries
+let msgFilter   = 'ALL';
+let auditFilter = 'ALL';
+let lastSeed    = null;
+let pendingLevel = null;
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────
+let ws = null;
+let reconnectTimer = null;
+
+function connect() {
+  const badge = document.getElementById('connBadge');
+  badge.className = 'conn-badge reconnecting';
+  badge.textContent = 'RECONNECTING';
+
+  ws = new WebSocket('ws://localhost:8765');
+
+  ws.onopen = () => {
+    badge.className = 'conn-badge connected';
+    badge.textContent = 'CONNECTED';
+    clearTimeout(reconnectTimer);
+
+    // Replace "Waiting…" placeholder with live-but-empty messages
+    const ml = document.getElementById('msgLog');
+    if (ml.querySelector('.empty-state')) {
+      ml.innerHTML = '<div class="empty-state" style="color:var(--green)">✓ Connected — use the controls to send UDS commands</div>';
+    }
+    const al = document.getElementById('auditLog');
+    if (al.querySelector('.empty-state')) {
+      al.innerHTML = '<div class="empty-state" style="color:var(--green)">✓ Connected — perform auth operations to generate entries</div>';
+    }
+
+    // Flash a toast
+    showToast('Connected to ECU ws://localhost:8765', 'ok');
+    // Request current state snapshot
+    ws.send(JSON.stringify({cmd: 'snapshot'}));
+  };
+
+  ws.onclose = () => {
+    badge.className = 'conn-badge disconnected';
+    badge.textContent = 'DISCONNECTED';
+    showToast('ECU server disconnected — retrying in 3 s…', 'err');
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (e) => {
+    try { handleMessage(JSON.parse(e.data)); }
+    catch(err) { console.warn('Parse error', err); }
+  };
+}
+
+function sendCmd(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(obj));
+  } else {
+    console.warn('WebSocket not connected — command ignored:', obj);
+  }
+}
+
+// ── Message dispatcher ────────────────────────────────────────────────────
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'session_update':     onSessionUpdate(msg);   break;
+    case 'auth_update':        onAuthUpdate(msg);      break;
+    case 'uds_message':        onUdsMessage(msg);      break;
+    case 'audit_entry':        onAuditEntry(msg);      break;
+    case 'tamper':             onTamper(msg);          break;
+    case 'access_level_update':onAccessLevel(msg);     break;
+    case 'seed_response':      onSeedResponse(msg);    break;
+    case 'mechanism_update':   onMechUpdate(msg);      break;
+    case 'snapshot':           onSnapshot(msg);        break;
+    default: console.log('Unknown msg type:', msg.type);
+  }
+}
+
+function onSessionUpdate(msg) {
+  state.session = msg.session || 'default';
+  if (msg.timer_remaining !== undefined) state.timerRemaining = msg.timer_remaining;
+  renderEcuState();
+}
+
+function onAuthUpdate(msg) {
+  const lv = (msg.level || '').toUpperCase();
+  if (lv && lv in state.attempts) {
+    state.attempts[lv]        = msg.attempts       || 0;
+    state.locked[lv]          = !!msg.locked;
+    state.lockoutRemaining[lv]= msg.lockout_remaining || 0;
+    state.delayRemaining[lv]  = msg.delay_remaining  || 0;
+  }
+  renderAuthStatus();
+}
+
+function onUdsMessage(msg) {
+  messages.push(msg);
+  if (messages.length > 500) messages.splice(0, 100);
+  document.getElementById('msgCount').textContent = messages.length + ' msgs';
+  appendMsgRow(msg);
+}
+
+function onAuditEntry(msg) {
+  auditEntries.push(msg.entry);
+  document.getElementById('auditCount').textContent = auditEntries.length + ' entries';
+  updateChainStatus(msg.chain_valid);
+  appendAuditRow(msg.entry, msg.chain_valid);
+}
+
+function onTamper(msg) {
+  state.tamper = msg.triggered;
+  renderEcuState();
+  if (msg.triggered) {
+    const tb = document.getElementById('tamperBadge');
+    tb.classList.add('tamper-active');
+    setTimeout(() => { tb.classList.remove('tamper-active'); state.tamper = false; renderEcuState(); }, 2200);
+  }
+}
+
+function onAccessLevel(msg) {
+  state.accessLevel = msg.level;
+  renderEcuState();
+}
+
+function onSeedResponse(msg) {
+  lastSeed = msg.seed;
+  pendingLevel = msg.level;
+  document.getElementById('keyHex').value = msg.hmac_key || '(server will compute)';
+  if (msg.hmac_key) document.getElementById('keyHex').placeholder = '';
+}
+
+function onMechUpdate(msg) {
+  state.mechUsed = msg.mechanism;
+  renderEcuState();
+}
+
+function onSnapshot(msg) {
+  if (msg.session)       state.session       = msg.session;
+  if (msg.access_level)  state.accessLevel   = msg.access_level;
+  if (msg.mechanism)     state.mechUsed      = msg.mechanism;
+  if (msg.timer)         state.timerRemaining= msg.timer;
+  if (msg.auth_levels) {
+    for (const [lv, d] of Object.entries(msg.auth_levels)) {
+      const key = lv.toUpperCase();
+      if (key in state.attempts) {
+        state.attempts[key]        = d.attempts || 0;
+        state.locked[key]          = !!d.locked;
+        state.lockoutRemaining[key]= d.lockout_remaining || 0;
+        state.delayRemaining[key]  = d.delay_remaining  || 0;
+      }
+    }
+  }
+  renderEcuState();
+  renderAuthStatus();
+}
+
+// ── Renderers ─────────────────────────────────────────────────────────────
+function renderEcuState() {
+  // Session badge
+  const sb = document.getElementById('sessionBadge');
+  sb.textContent = state.session.toUpperCase();
+  sb.className   = 'badge ' + state.session.toLowerCase().replace(' ', '_');
+
+  // Access level badge
+  const ab = document.getElementById('accessBadge');
+  const lv = state.accessLevel || 'none';
+  ab.textContent = lv.toUpperCase();
+  ab.className   = 'badge ' + lv.toLowerCase().replace(' ','_').replace('/','_');
+
+  // Mechanism badge
+  const mb = document.getElementById('mechBadge');
+  if (!state.mechUsed || state.mechUsed === 'none') {
+    mb.textContent = 'NONE'; mb.className = 'badge none';
+  } else if (state.mechUsed === '0x27') {
+    mb.textContent = '0x27 SecurityAccess'; mb.className = 'badge sw27';
+  } else {
+    mb.textContent = '0x29 Authentication'; mb.className = 'badge sw29';
+  }
+
+  // Tamper badge
+  const ta = document.getElementById('tamperBadge');
+  ta.textContent = state.tamper ? 'TRIGGERED' : 'OFF';
+  ta.className   = 'badge ' + (state.tamper ? 'err' : 'none');
+
+  // Session timer
+  const pct = Math.max(0, Math.min(1, state.timerRemaining / MAX_TIMEOUT));
+  const fill = document.getElementById('timerFill');
+  fill.style.width = (pct * 100) + '%';
+  fill.style.background = pct > .5 ? 'var(--green)' : pct > .2 ? 'var(--amber)' : 'var(--red)';
+  document.getElementById('timerText').textContent =
+    state.session === 'default' ? '—' : state.timerRemaining + 's';
+
+  // Session button highlights
+  ['Default','Extended','Program'].forEach(n => {
+    const b = document.getElementById('btn'+n);
+    if (b) b.classList.remove('session-active');
+  });
+  const activeBtn = {default:'Default', extended:'Extended', programming:'Program'}[state.session];
+  if (activeBtn) document.getElementById('btn'+activeBtn)?.classList.add('session-active');
+}
+
+function renderAuthStatus() {
+  const levels = ['CALIBRATION','ECU_PROGRAMMING','ENGINEERING','FULL_ACCESS'];
+  const body = document.getElementById('authStatusBody');
+  body.innerHTML = '';
+  for (const lv of levels) {
+    const row = document.createElement('div');
+    row.className = 'auth-level-row';
+
+    const top = document.createElement('div');
+    top.className = 'auth-level-top';
+
+    const name = document.createElement('span');
+    name.className = 'auth-level-name';
+    name.textContent = lv;
+
+    const right = document.createElement('div');
+    right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap = '8px';
+
+    if (state.locked[lv]) {
+      const lb = document.createElement('span');
+      lb.className = 'lockout-badge';
+      lb.textContent = 'LOCKED' + (state.lockoutRemaining[lv] > 0 ? ' ' + Math.ceil(state.lockoutRemaining[lv]) + 's' : '');
+      right.appendChild(lb);
+    } else {
+      const pips = document.createElement('div');
+      pips.className = 'attempt-pips';
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const p = document.createElement('div');
+        p.className = 'pip' + (i < state.attempts[lv] ? ' used' : '');
+        pips.appendChild(p);
+      }
+      const cnt = document.createElement('span');
+      cnt.style.fontSize = '10px'; cnt.style.color = 'var(--text2)';
+      cnt.textContent = state.attempts[lv] + '/' + MAX_ATTEMPTS;
+      right.appendChild(pips);
+      right.appendChild(cnt);
+    }
+
+    top.appendChild(name);
+    top.appendChild(right);
+    row.appendChild(top);
+
+    // Delay bar
+    if (state.delayRemaining[lv] > 0) {
+      const db = document.createElement('div');
+      db.className = 'delay-bar';
+      const df = document.createElement('div');
+      df.className = 'delay-fill';
+      df.style.width = '100%';
+      db.appendChild(df);
+      row.appendChild(db);
+    }
+
+    body.appendChild(row);
+  }
+}
+
+// ── Message log ───────────────────────────────────────────────────────────
+function appendMsgRow(msg) {
+  const log = document.getElementById('msgLog');
+  const empty = log.querySelector('.empty-state');
+  if (empty) empty.remove();
+
+  const svc = (msg.service || '').toString();
+  const isNrc = (msg.result || '').toLowerCase().includes('nrc') || msg.result === 'negative';
+  const isPos = msg.result === 'positive';
+
+  if (msgFilter !== 'ALL') {
+    if (msgFilter === 'NRC' && !isNrc) return;
+    if (msgFilter !== 'NRC' && svc !== msgFilter) return;
+  }
+
+  const row = document.createElement('div');
+  row.className = 'msg-row' + (isNrc ? ' nrc' : isPos ? ' pos' : '');
+  row.dataset.service = svc;
+  row.dataset.nrc = isNrc ? '1' : '0';
+
+  const ts = new Date(msg.ts || Date.now()).toLocaleTimeString('en-US',{hour12:false,fractionalSecondDigits:2});
+  const dir = msg.direction === 'client→ecu' ? '→' : '←';
+  const dirCls = msg.direction === 'client→ecu' ? 'out' : 'in';
+  const resCls = isNrc ? 'neg' : isPos ? 'pos' : 'req';
+
+  row.innerHTML = `
+    <span class="msg-ts">${ts}</span>
+    <span class="msg-dir ${dirCls}">${dir}</span>
+    <span class="msg-svc">${svc}</span>
+    <span class="msg-sub">${msg.sub || ''}</span>
+    <span class="msg-result ${resCls}">${msg.data || msg.result || ''}</span>
+  `;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setMsgFilter(f, btn) {
+  msgFilter = f;
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Re-render from stored messages
+  const log = document.getElementById('msgLog');
+  log.innerHTML = '';
+  messages.forEach(m => appendMsgRow(m));
+  if (!log.children.length) log.innerHTML = '<div class="empty-state">No messages match filter</div>';
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────
+function appendAuditRow(entry, chainValid) {
+  const log = document.getElementById('auditLog');
+  const empty = log.querySelector('.empty-state');
+  if (empty) empty.remove();
+
+  const et = (entry.event_type || '').toLowerCase();
+
+  if (auditFilter !== 'ALL') {
+    const cats = {
+      AUTH:    ['auth_success','auth_failure','auth_attempt'],
+      SESSION: ['session_start','session_end','session_timeout','session_tamper_reset'],
+      TAMPER:  ['session_tamper_reset','replay_detected'],
+      LOCKOUT: ['lockout_triggered','lockout_expired']
+    };
+    const allowed = cats[auditFilter] || [];
+    if (!allowed.includes(et)) return;
+  }
+
+  const row = document.createElement('div');
+  row.className = 'audit-row';
+  row.dataset.et = et;
+
+  const ts = new Date(entry.timestamp || Date.now()).toLocaleTimeString('en-US',{hour12:false,fractionalSecondDigits:2});
+  const typeBadge = `<span class="audit-type ${et}">${(entry.event_type||'').replace(/_/g,' ')}</span>`;
+  const level = entry.access_level ? `<span class="audit-level">${entry.access_level}</span>` : '';
+  const nrc   = entry.nrc_code     ? `<span class="audit-level" style="color:var(--red)">${entry.nrc_code}</span>` : '';
+  const chain = chainValid !== undefined
+    ? `<span class="chain-indicator ${chainValid?'chain-ok':'chain-fail'}">${chainValid?'✓':'✗'}</span>` : '';
+
+  row.innerHTML = `<span class="audit-ts">${ts}</span>${typeBadge}${level}${nrc}${chain}`;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setAuditFilter(f, btn) {
+  auditFilter = f;
+  document.querySelectorAll('.filter-btn[data-afilter]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const log = document.getElementById('auditLog');
+  log.innerHTML = '';
+  auditEntries.forEach(e => appendAuditRow(e, undefined));
+  if (!log.children.length) log.innerHTML = '<div class="empty-state">No entries match filter</div>';
+}
+
+function updateChainStatus(valid) {
+  const el = document.getElementById('chainStatus');
+  if (valid) {
+    el.textContent = '✓ VALID (' + auditEntries.length + ' entries)';
+    el.className = 'chain-ok';
+  } else {
+    el.textContent = '✗ CHAIN BROKEN at entry ' + auditEntries.length;
+    el.className = 'chain-fail';
+  }
+}
+
+// ── Send Key helper ───────────────────────────────────────────────────────
+function doSendKey() {
+  const level = document.getElementById('sa27Level').value;
+  const keyVal = document.getElementById('keyHex').value.trim();
+  sendCmd({cmd: '0x27_key', level: level, key: keyVal});
+}
+
+// ── Timer tick ────────────────────────────────────────────────────────────
+setInterval(() => {
+  if (state.session !== 'default' && state.timerRemaining > 0) {
+    state.timerRemaining = Math.max(0, state.timerRemaining - 1);
+    renderEcuState();
+  }
+}, 1000);
+
+// ── Init ──────────────────────────────────────────────────────────────────
+renderEcuState();
+renderAuthStatus();
+connect();
+</script>
+</body>
+</html>

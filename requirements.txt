@@ -1,0 +1,4 @@
+cryptography>=44.0
+websockets>=13.0
+pytest>=8.0
+pytest-mock>=3.14

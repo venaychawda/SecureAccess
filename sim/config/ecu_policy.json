@@ -1,0 +1,170 @@
+{
+  "version": "1.0.0",
+  "description": "Virtual ECU security policy for secure-access-lab Phase 1 simulation",
+
+  "session": {
+    "timeout_seconds": 300,
+    "default_session_id": 1,
+    "extended_session_id": 3,
+    "programming_session_id": 2,
+    "allowed_transitions": {
+      "1": [2, 3],
+      "3": [1, 2],
+      "2": [1, 3]
+    },
+    "comment_transitions": "Keys are source session IDs, values are allowed destination session IDs. Direct Default→Programming is NOT in this list; it is blocked at application logic level (requires Extended or 0x29 first)."
+  },
+
+  "security_access_0x27": {
+    "comment": "Subfunction pairs: odd = requestSeed, even = sendKey. Each pair maps to an access level.",
+    "levels": {
+      "calibration": {
+        "request_seed_subfunction": "0x01",
+        "send_key_subfunction": "0x02",
+        "algorithm": "HMAC-SHA256",
+        "shared_secret_env_var": "SAL_0x27_SECRET_CALIBRATION",
+        "shared_secret_default_sim": "sim-calibration-secret-dev-only",
+        "required_session": "extended",
+        "grants_access_level": "CALIBRATION"
+      },
+      "ecu_programming": {
+        "request_seed_subfunction": "0x03",
+        "send_key_subfunction": "0x04",
+        "algorithm": "HMAC-SHA256",
+        "shared_secret_env_var": "SAL_0x27_SECRET_PROGRAMMING",
+        "shared_secret_default_sim": "sim-programming-secret-dev-only",
+        "required_session": "programming",
+        "grants_access_level": "ECU_PROGRAMMING"
+      }
+    }
+  },
+
+  "authentication_0x29": {
+    "comment": "PKI-based authentication. Certs generated at first run, stored in sim/hal/certs/.",
+    "root_ca": {
+      "cert_path": "sim/hal/certs/root_ca.pem",
+      "key_path": "sim/hal/certs/root_ca_key.pem",
+      "algorithm": "ECDSA-P256",
+      "validity_days": 3650
+    },
+    "ecu_cert": {
+      "cert_path": "sim/hal/certs/ecu_cert.pem",
+      "key_path": "sim/hal/certs/ecu_key.pem",
+      "subject_cn": "VirtualECU-SAL-001",
+      "validity_days": 730
+    },
+    "tester_cert": {
+      "cert_path": "sim/hal/certs/tester_cert.pem",
+      "key_path": "sim/hal/certs/tester_key.pem",
+      "subject_cn": "DiagnosticTester-SAL-001",
+      "validity_days": 365
+    },
+    "modes": {
+      "unidirectional": {
+        "description": "Tester authenticates to ECU only",
+        "grants_access_level": "ENGINEERING",
+        "required_session": "extended"
+      },
+      "bidirectional": {
+        "description": "Mutual authentication — tester and ECU exchange and verify certs",
+        "grants_access_level": "FULL_ACCESS",
+        "required_session": "programming"
+      }
+    },
+    "revoked_cert_thumbprints": [
+      "comment: SHA-256 thumbprints of revoked tester certs go here. Populated during TC-06 tests.",
+      "0000000000000000000000000000000000000000000000000000000000000000"
+    ]
+  },
+
+  "access_levels": {
+    "READ_ONLY": {
+      "description": "Non-sensitive read operations: read DTCs, read non-protected data IDs",
+      "required_session": "default",
+      "required_auth": "none"
+    },
+    "CALIBRATION": {
+      "description": "Write calibration data, clear DTCs",
+      "required_session": "extended",
+      "required_auth": "0x27_calibration"
+    },
+    "ECU_PROGRAMMING": {
+      "description": "Flash download, memory write, ECU reprogramming",
+      "required_session": "programming",
+      "required_auth": "0x27_ecu_programming"
+    },
+    "ENGINEERING": {
+      "description": "Read/write protected parameters, diagnostic mode activation",
+      "required_session": "extended",
+      "required_auth": "0x29_unidirectional"
+    },
+    "FULL_ACCESS": {
+      "description": "Key provisioning, security parameter write, ECU lifecycle management",
+      "required_session": "programming",
+      "required_auth": "0x29_bidirectional"
+    }
+  },
+
+  "lockout": {
+    "max_auth_attempts": 3,
+    "lockout_duration_seconds": 3600,
+    "required_delay_seconds": 10,
+    "comment": "Attempt counters are tracked per access level independently. Lockout on CALIBRATION does not affect ECU_PROGRAMMING."
+  },
+
+  "crypto": {
+    "challenge_size_bytes": 32,
+    "nonce_size_bytes": 16,
+    "seed_algorithm": "os.urandom",
+    "key_comparison": "hmac.compare_digest",
+    "cert_signature_algorithm": "ECDSA",
+    "cert_hash_algorithm": "SHA-256",
+    "cert_curve": "P-256"
+  },
+
+  "negative_response_codes": {
+    "0x13": "incorrectMessageLengthOrInvalidFormat",
+    "0x22": "conditionsNotCorrect",
+    "0x24": "requestSequenceError",
+    "0x35": "invalidKey",
+    "0x36": "exceededNumberOfAttempts",
+    "0x37": "requiredTimeDelayNotExpired",
+    "0x73": "unsupportedCertificateFormat",
+    "0x74": "certificateVerificationFailed",
+    "0x75": "certificateExpired",
+    "0x76": "certificateSignatureInvalid",
+    "0x78": "certificateChainVerificationFailed"
+  },
+
+  "audit_log": {
+    "log_path": "logs/audit.jsonl",
+    "hash_algorithm": "SHA-256",
+    "chain_field": "prev_hash",
+    "genesis_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "required_fields": [
+      "timestamp",
+      "event_type",
+      "service_id",
+      "access_level",
+      "client_id",
+      "result",
+      "nrc_code",
+      "prev_hash",
+      "entry_hash"
+    ],
+    "event_types": [
+      "AUTH_ATTEMPT",
+      "AUTH_SUCCESS",
+      "AUTH_FAILURE",
+      "SESSION_START",
+      "SESSION_TIMEOUT",
+      "SESSION_END",
+      "SESSION_TAMPER_RESET",
+      "LOCKOUT_TRIGGERED",
+      "LOCKOUT_EXPIRED",
+      "DEAUTHENTICATE",
+      "REPLAY_DETECTED",
+      "BRUTE_FORCE_DETECTED"
+    ]
+  }
+}

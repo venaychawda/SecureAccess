@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Access Lab — UDS Diagnostic Security Demo</title>
+<style>
+:root {
+  --bg:#EEF4FB; --surface:#FFFFFF; --surface2:#F5F9FF;
+  --border:#C8DCF5; --text:#1A3050; --muted:#607898;
+  --primary:#3B7DD8; --primary-lt:#DAEAF8; --primary-dk:#2260B0;
+  --success:#1A9E6A; --success-lt:#D3F5E8;
+  --warn:#D97706; --warn-lt:#FEF3C7;
+  --danger:#DC3545; --danger-lt:#FDEAEC;
+  --purple:#7C5FC4; --purple-lt:#EDE9FE;
+  --teal:#0D9488; --teal-lt:#CCFBF1;
+  --mono:'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Header ── */
+header{background:linear-gradient(135deg,#1a3a6e,#2563EB);color:#fff;padding:22px 36px;box-shadow:0 4px 14px rgba(37,99,235,.3)}
+header h1{font-size:1.65rem;font-weight:800;letter-spacing:-.3px}
+header p{opacity:.82;font-size:.9rem;margin-top:3px}
+.badges{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.badge{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);padding:3px 11px;border-radius:20px;font-size:.72rem;font-weight:700}
+
+/* ── Layout ── */
+.wrap{max-width:1380px;margin:0 auto;padding:22px 20px}
+.sect-title{font-size:.72rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
+
+/* ── Scenario cards ── */
+.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:10px;margin-bottom:22px}
+.sc-card{background:var(--surface);border:2px solid var(--border);border-radius:11px;padding:13px 15px;cursor:pointer;transition:all .18s;user-select:none}
+.sc-card:hover{border-color:var(--primary);box-shadow:0 3px 12px rgba(59,125,216,.18);transform:translateY(-1px)}
+.sc-card.active{border-color:var(--primary);background:var(--primary-lt)}
+.sc-card .ic{font-size:1.35rem;margin-bottom:5px}
+.sc-card .ttl{font-size:.82rem;font-weight:700;color:var(--text)}
+.sc-card .sub{font-size:.68rem;color:var(--muted);margin-top:2px}
+.sc-card.active .ttl{color:var(--primary-dk)}
+
+/* ── Three-panel sim ── */
+.sim{display:grid;grid-template-columns:255px 1fr 255px;gap:14px;margin-bottom:18px}
+@media(max-width:900px){.sim{grid-template-columns:1fr}.sim .proto{order:-1}}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.ph{padding:11px 15px;font-size:.8rem;font-weight:800;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px}
+.ph.client{background:var(--teal-lt);color:#0F766E}
+.ph.proto{background:var(--primary-lt);color:var(--primary-dk)}
+.ph.ecu{background:var(--purple-lt);color:#5B21B6}
+.ph .proc{font-size:.65rem;font-weight:400;margin-left:auto;opacity:.7}
+.pb{padding:14px}
+
+/* ── State rows ── */
+.si{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:.8rem}
+.si:last-child{border-bottom:none}
+.sl{color:var(--muted);font-weight:600}
+.sv{font-family:var(--mono);font-size:.73rem;padding:2px 8px;border-radius:6px;font-weight:700}
+.sv.def{background:#EEF2F7;color:#4A5568}
+.sv.ext{background:var(--warn-lt);color:#92400E}
+.sv.prg{background:var(--danger-lt);color:#991B1B}
+.sv.none{background:#EEF2F7;color:#4A5568}
+.sv.cal{background:var(--success-lt);color:#065F46}
+.sv.eng{background:var(--warn-lt);color:#92400E}
+.sv.epr{background:var(--danger-lt);color:#991B1B}
+.sv.fac{background:var(--purple-lt);color:#5B21B6}
+.sv.lck{background:var(--danger-lt);color:#991B1B}
+.sv.ok{background:var(--success-lt);color:#065F46}
+
+/* ── Internal state box ── */
+.ibox{border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:.68rem;line-height:1.9;margin-top:12px}
+.ibox.client{background:var(--teal-lt);color:#0F766E}
+.ibox.ecu{background:var(--purple-lt);color:#5B21B6}
+.ibox b{font-weight:800}
+
+/* ── Attempt bar ── */
+.ab{display:flex;gap:4px;margin-top:3px}
+.ad{width:17px;height:7px;border-radius:2px;background:var(--border);transition:all .3s}
+.ad.used{background:var(--warn)}
+.ad.lck{background:var(--danger)}
+
+/* ── Message list ── */
+.mlist{min-height:360px;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:10px}
+.mr{display:flex;gap:7px;align-items:flex-start;animation:fi .28s ease}
+@keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.mr.toecu{flex-direction:row}
+.mr.toclient{flex-direction:row-reverse}
+.mr.sys{justify-content:center}
+.mb{max-width:88%;border-radius:10px;padding:9px 13px;font-size:.78rem}
+.mb.req{background:var(--teal-lt);border:1px solid #99F6E4;color:#0F766E}
+.mb.pos{background:var(--success-lt);border:1px solid #6EE7B7;color:#065F46}
+.mb.neg{background:var(--danger-lt);border:1px solid #FCA5A5;color:#991B1B}
+.mb.sys{background:var(--primary-lt);border:1px solid #BFDBFE;color:var(--primary-dk);font-style:italic;font-size:.75rem;text-align:center;width:100%;padding:7px 14px}
+.mdir{font-size:.62rem;font-weight:800;color:var(--muted);margin-bottom:2px}
+.mhex{font-family:var(--mono);font-weight:800;letter-spacing:.4px;font-size:.8rem;margin-bottom:3px}
+.mdesc{font-size:.73rem;opacity:.85}
+.marr{font-size:1.15rem;padding-top:8px;flex-shrink:0}
+
+/* ── Controls ── */
+.ctrl{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 18px;margin-bottom:18px}
+.crow{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.btn{padding:7px 17px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.btn.pri{background:var(--primary);color:#fff}
+.btn.pri:hover:not(:disabled){background:var(--primary-dk)}
+.btn.sec{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn.sec:hover:not(:disabled){background:var(--primary-lt);border-color:var(--primary);color:var(--primary)}
+.btn.grn{background:var(--success);color:#fff}
+.btn.grn:hover:not(:disabled){background:#0D7A52}
+.step-ind{font-size:.8rem;color:var(--muted);font-weight:700;flex:1;min-width:90px}
+.sbar{display:flex;gap:3px;flex-wrap:wrap}
+.sd{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .2s;flex-shrink:0}
+.sd.done{background:var(--success)}
+.sd.cur{background:var(--primary);transform:scale(1.45)}
+
+/* ── Explanation ── */
+.expl{background:var(--surface2);border-left:4px solid var(--primary);border-radius:0 8px 8px 0;padding:11px 15px;font-size:.83rem;line-height:1.65}
+.rt{display:inline-block;background:var(--primary-lt);color:var(--primary-dk);border-radius:4px;padding:1px 6px;font-size:.68rem;font-weight:800;font-family:var(--mono);margin-right:3px}
+.nt{display:inline-block;background:var(--danger-lt);color:#B91C1C;border-radius:4px;padding:1px 6px;font-size:.68rem;font-weight:800;font-family:var(--mono);margin-right:3px}
+.rchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.rchip{background:var(--primary-lt);color:var(--primary-dk);border-radius:4px;padding:2px 8px;font-size:.68rem;font-weight:800;font-family:var(--mono)}
+
+/* ── Audit log ── */
+.alog{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
+.alh{padding:11px 18px;background:#1E293B;color:#94A3B8;font-size:.75rem;font-weight:700;font-family:var(--mono);display:flex;justify-content:space-between;align-items:center}
+.alb{max-height:260px;overflow-y:auto;background:#0F172A}
+.le{padding:9px 18px;border-bottom:1px solid #1E293B;font-family:var(--mono);font-size:.72rem;line-height:1.7;white-space:pre-wrap}
+.le:last-child{border-bottom:none}
+.lf{color:#7DD3FC}
+.lv{color:#86EFAC}
+.lv.bad{color:#FCA5A5}
+.lv.ts{color:#FCD34D}
+.lhash{color:#C084FC}
+.lbr{color:#94A3B8}
+
+/* ── NRC legend ── */
+.nrcg{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:8px}
+.nrci{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 11px;font-size:.73rem}
+.nrci code{font-family:var(--mono);color:var(--danger);font-weight:800}
+
+footer{text-align:center;color:var(--muted);font-size:.75rem;padding:18px;border-top:1px solid var(--border);margin-top:6px}
+footer a{color:var(--primary);text-decoration:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔐 Secure Access Lab</h1>
+  <p>UDS Diagnostic Security — Virtual ECU Simulation (Phase 1 · Pure Python)</p>
+  <div class="badges">
+    <span class="badge">53 Requirements</span>
+    <span class="badge">13 Test Cases</span>
+    <span class="badge">107 Tests GREEN ✓</span>
+    <span class="badge">ISO 14229 / UDS</span>
+    <span class="badge">0x10 · 0x27 · 0x29</span>
+    <span class="badge">Two-Process Trust Boundary</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="sect-title">Select Demo Scenario</div>
+  <div class="sc-grid" id="scGrid"></div>
+
+  <div class="sim">
+    <!-- Client -->
+    <div class="panel">
+      <div class="ph client">💻 Diagnostic Client <span class="proc">Process 1</span></div>
+      <div class="pb">
+        <div class="si"><span class="sl">Session</span><span class="sv def" id="cSess">DEFAULT</span></div>
+        <div class="si"><span class="sl">Access Level</span><span class="sv none" id="cAccess">NONE</span></div>
+        <div class="si"><span class="sl">Cert Store</span><span class="sv ok">Root CA + Tester</span></div>
+        <div class="si"><span class="sl">Last Request</span><span class="sv def" id="cLastReq" style="font-size:.67rem">—</span></div>
+        <div class="ibox client">
+          shared_secret: <b>••••••••</b><br>
+          tester_privkey: <b>EC P-256</b><br>
+          pending_seed:&nbsp;&nbsp;<b id="cSeed">—</b><br>
+          computed_key:&nbsp;&nbsp;<b id="cKey">—</b>
+        </div>
+      </div>
+    </div>
+
+    <!-- Protocol -->
+    <div class="panel proto">
+      <div class="ph proto">⇄ JSON-RPC Socket Exchange <span class="proc">Trust Boundary</span></div>
+      <div class="mlist" id="mlist">
+        <div style="display:flex;align-items:center;justify-content:center;height:120px;color:var(--muted);font-size:.85rem">
+          Select a scenario · press ▶ Next Step
+        </div>
+      </div>
+    </div>
+
+    <!-- ECU -->
+    <div class="panel">
+      <div class="ph ecu">🖥️ Virtual ECU <span class="proc">Process 2</span></div>
+      <div class="pb">
+        <div class="si"><span class="sl">Session</span><span class="sv def" id="eSess">DEFAULT</span></div>
+        <div class="si"><span class="sl">Access Level</span><span class="sv none" id="eAccess">NONE</span></div>
+        <div class="si">
+          <span class="sl">Attempts 0x27</span>
+          <div style="text-align:right">
+            <span class="sv def" id="eAtt27">0 / 3</span>
+            <div class="ab"><div class="ad" id="a27_0"></div><div class="ad" id="a27_1"></div><div class="ad" id="a27_2"></div></div>
+          </div>
+        </div>
+        <div class="si">
+          <span class="sl">Attempts 0x29</span>
+          <div style="text-align:right">
+            <span class="sv def" id="eAtt29">0 / 3</span>
+            <div class="ab"><div class="ad" id="a29_0"></div><div class="ad" id="a29_1"></div><div class="ad" id="a29_2"></div></div>
+          </div>
+        </div>
+        <div class="si"><span class="sl">Lockout</span><span class="sv ok" id="eLock">—</span></div>
+        <div class="ibox ecu">
+          pending_seed:&nbsp;<b id="eSeed">—</b><br>
+          nonce_seen:&nbsp;&nbsp;&nbsp;<b id="eNonce">—</b><br>
+          audit_entries: <b id="eAudit">0</b><br>
+          session_timer: <b id="eTimer">300s</b>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="ctrl">
+    <div class="crow">
+      <button class="btn sec" id="bPrev" onclick="stepBack()" disabled>◄ Prev</button>
+      <button class="btn pri" id="bNext" onclick="stepFwd()">▶ Next Step</button>
+      <button class="btn grn" id="bAuto" onclick="autoPlay()">▶▶ Auto Play</button>
+      <button class="btn sec" onclick="resetSc()">↺ Reset</button>
+      <span class="step-ind" id="stepInd">—</span>
+      <div class="sbar" id="sbar"></div>
+    </div>
+    <div class="expl" id="expl">
+      <b>Welcome to Secure Access Lab</b><br>
+      Select a scenario above to explore UDS diagnostic security in action.
+      Each step shows the exact JSON-RPC messages between the Diagnostic Client (Process 1)
+      and Virtual ECU (Process 2) across the two-process trust boundary socket.
+    </div>
+  </div>
+
+  <!-- Audit log -->
+  <div class="alog">
+    <div class="alh">
+      <span>📋 AUDIT LOG — Hash-Chained JSON (REQ-051 · REQ-052 · REQ-053)</span>
+      <button class="btn sec" onclick="clearLog()" style="font-size:.68rem;padding:3px 9px">Clear</button>
+    </div>
+    <div class="alb" id="alogBody">
+      <div style="padding:18px;color:#64748B;font-family:monospace;font-size:.75rem;text-align:center">
+        — log entries appear as authentication events occur —
+      </div>
+    </div>
+  </div>
+
+  <!-- NRC Legend -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:15px 18px;margin-bottom:18px">
+    <div style="font-weight:800;font-size:.82rem;margin-bottom:4px">UDS Negative Response Codes (NRC) in Scope</div>
+    <div class="nrcg">
+      <div class="nrci"><code>0x22</code> conditionsNotCorrect</div>
+      <div class="nrci"><code>0x24</code> requestSequenceError</div>
+      <div class="nrci"><code>0x35</code> invalidKey</div>
+      <div class="nrci"><code>0x36</code> exceededNumberOfAttempts</div>
+      <div class="nrci"><code>0x37</code> requiredTimeDelayNotExpired</div>
+      <div class="nrci"><code>0x73</code> unsupportedCertificateFormat</div>
+      <div class="nrci"><code>0x74</code> certificateVerificationFailed (CRL)</div>
+      <div class="nrci"><code>0x75</code> certificateExpired</div>
+      <div class="nrci"><code>0x76</code> certificateSignatureInvalid</div>
+      <div class="nrci"><code>0x78</code> certificateChainVerificationFailed</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Secure Access Lab · Phase 1 Pure Python Simulation &nbsp;|&nbsp;
+  53 Requirements · 13 Test Cases · 107 Tests Passing &nbsp;|&nbsp;
+  ISO 14229 / UDS &nbsp;|&nbsp;
+  <a href="https://github.com">View Source on GitHub</a>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+//  SCENARIO DATA
+// ═══════════════════════════════════════════════════════════════════════
+const SCENARIOS = [
+  {
+    id:'tc01', icon:'🔄', title:'Session Transitions', sub:'TC-01 · REQ-001–004,009',
+    reqs:['REQ-001','REQ-002','REQ-003','REQ-004','REQ-009'],
+    steps:[
+      { msg:{t:'sys',txt:'ECU powers up — initialises to Default Session (0x01)'},
+        st:{eS:'DEFAULT',cS:'DEFAULT',eA:'NONE',cA:'NONE',eTimer:'300s'},
+        ex:`<span class="rt">REQ-001</span> On every simulated power-up or reset the Virtual ECU <b>SHALL initialise in Default Session (0x01)</b>. This is the secure baseline state. No diagnostic service except basic reads is available here.` },
+      { msg:{t:'req',hex:'10 03',lbl:'DiagnosticSessionControl',desc:'Request Extended Session (subfunction 0x03)'},
+        st:{cLastReq:'10 03'},
+        ex:`<span class="rt">REQ-002</span> Client sends <b>0x10 03</b> (DiagnosticSessionControl, subfunction = Extended). This is the first allowed escalation step from Default Session.` },
+      { msg:{t:'resp',pos:true,hex:'50 03 00 19 01 F4',lbl:'PositiveResponse',desc:'Extended Session active. P2=25 ms, P2*=500 ms'},
+        st:{eS:'EXTENDED',cS:'EXTENDED'},
+        ex:`<span class="rt">REQ-002</span> ECU responds <b>0x50 03</b>. Extended Session is now active. The 300 s inactivity timer starts. SecurityAccess (0x27) and Authentication (0x29) services become available.` },
+      { msg:{t:'req',hex:'10 02',lbl:'DiagnosticSessionControl',desc:'Request Programming Session (subfunction 0x02)'},
+        st:{cLastReq:'10 02'},
+        ex:`<span class="rt">REQ-003</span> From Extended Session the client requests Programming Session. This transition is <b>permitted</b> — the ECU is already in Extended Session.` },
+      { msg:{t:'resp',pos:true,hex:'50 02 00 19 01 F4',lbl:'PositiveResponse',desc:'Programming Session granted'},
+        st:{eS:'PROGRAMMING',cS:'PROGRAMMING'},
+        ex:`<span class="rt">REQ-003</span> Programming Session granted. Valid path: Default → Extended → Programming. A <b>direct Default → Programming jump is always blocked</b>.` },
+      { msg:{t:'sys',txt:'Simulating ECU reset → back to Default Session'},
+        st:{eS:'DEFAULT',cS:'DEFAULT',eA:'NONE',cA:'NONE'},
+        ex:`ECU reset to Default Session to demonstrate the <b>illegal</b> direct transition attempt.` },
+      { msg:{t:'req',hex:'10 02',lbl:'DiagnosticSessionControl — ILLEGAL',desc:'Attempting Programming Session directly from Default (no Extended step)'},
+        st:{cLastReq:'10 02 (illegal)'},
+        ex:`<span class="rt">REQ-003</span><span class="rt">REQ-004</span> Client attempts <b>Default → Programming</b> directly. The session state machine forbids this — Programming requires prior Extended Session or completed 0x29 Authentication.` },
+      { msg:{t:'resp',pos:false,hex:'7F 10 22',lbl:'NegativeResponse',desc:'NRC 0x22 — conditionsNotCorrect'},
+        st:{eS:'DEFAULT'},
+        ex:`<span class="rt">REQ-004</span> ECU rejects with <span class="nt">NRC 0x22</span> <b>conditionsNotCorrect</b>. Session state machine bypass is prevented. ECU stays in Default Session.`,
+        audit:{ev:'session_violation',svc:'0x10',lvl:'—',res:'failure',nrc:'0x22'} },
+    ]
+  },
+  {
+    id:'tc03', icon:'🌱', title:'0x27 Seed Generation', sub:'TC-03 · REQ-010–012',
+    reqs:['REQ-010','REQ-011','REQ-012'],
+    steps:[
+      { msg:{t:'sys',txt:'ECU in Default Session. Attempting requestSeed → must be rejected.'},
+        st:{eS:'DEFAULT',cS:'DEFAULT',eA:'NONE',cA:'NONE'},
+        ex:`<span class="rt">REQ-012</span> 0x27 SecurityAccess is <b>only available in Extended or Programming Session</b>. First we prove it is blocked in Default Session.` },
+      { msg:{t:'req',hex:'27 01',lbl:'SecurityAccess — requestSeed',desc:'Subfunction 0x01 (CALIBRATION). Sent from Default Session.'},
+        st:{cLastReq:'27 01'},
+        ex:`<span class="rt">REQ-012</span> Client sends <b>0x27 01</b> requestSeed from Default Session. The ECU must reject this — 0x27 is not available in Default.` },
+      { msg:{t:'resp',pos:false,hex:'7F 27 22',lbl:'NegativeResponse',desc:'NRC 0x22 — conditionsNotCorrect'},
+        st:{},
+        ex:`<span class="rt">REQ-012</span> <span class="nt">NRC 0x22</span> returned. Correct — seed generation is session-gated. Client must escalate to Extended Session first.` },
+      { msg:{t:'sys',txt:'Client escalates to Extended Session. Now retrying requestSeed.'},
+        st:{eS:'EXTENDED',cS:'EXTENDED'},
+        ex:`Client sends 0x10 03 (Extended Session) — granted. Now in Extended Session. 0x27 is now available.` },
+      { msg:{t:'req',hex:'27 01',lbl:'SecurityAccess — requestSeed',desc:'Subfunction 0x01. CALIBRATION level. From Extended Session.'},
+        st:{cLastReq:'27 01'},
+        ex:`<span class="rt">REQ-010</span><span class="rt">REQ-011</span> Client sends <b>0x27 01</b> from Extended Session. ECU generates a 32-byte seed via <code>os.urandom(32)</code> (CSPRNG — not time-based, not random.random()).` },
+      { msg:{t:'resp',pos:true,hex:'67 01 A4 C7 2F 91 B3 5E 0D 88 F2 4A 71 C6 39 E1 55 A8 B0 6C 2D 9F 47 83 11 CE 5A 78 E4 30 9B 62...',lbl:'PositiveResponse — seed',desc:'32-byte CSPRNG seed. Unique per request. Stored in ECU pending sendKey.'},
+        st:{eSeed:'A4 C7 2F… (32 B)',cSeed:'A4 C7 2F… (32 B)'},
+        ex:`<span class="rt">REQ-010</span><span class="rt">REQ-011</span> ECU responds <b>0x67 01</b> with a fresh 32-byte (<code>CHALLENGE_SIZE_BYTES</code>) seed. In the test suite 1000 consecutive seeds are verified to be unique. Seed is held in ECU state pending sendKey.` },
+    ]
+  },
+  {
+    id:'tc04', icon:'🔑', title:'0x27 Key Validation', sub:'TC-04 · REQ-013–016,019',
+    reqs:['REQ-013','REQ-014','REQ-015','REQ-016','REQ-019'],
+    steps:[
+      { msg:{t:'sys',txt:'ECU in Extended Session. Starting complete 0x27 CALIBRATION flow.'},
+        st:{eS:'EXTENDED',cS:'EXTENDED',eA:'NONE',cA:'NONE'},
+        ex:`<span class="rt">REQ-019</span> Subfunction pairing: <b>0x01 (odd) = requestSeed</b>, <b>0x02 (even) = sendKey</b> for CALIBRATION. Subfunction 0x03/0x04 maps to ECU_PROGRAMMING.` },
+      { msg:{t:'req',hex:'27 01',lbl:'SecurityAccess — requestSeed',desc:'CALIBRATION level requestSeed'},
+        st:{cLastReq:'27 01'},
+        ex:`Client sends requestSeed for CALIBRATION (subfunction 0x01). ECU generates CSPRNG seed.` },
+      { msg:{t:'resp',pos:true,hex:'67 01 A4 C7 2F 91 B3 5E 0D 88 F2 4A 71 C6 39 E1...',lbl:'Seed issued',desc:'32-byte seed. ECU awaits matching sendKey.'},
+        st:{eSeed:'A4 C7 2F…',cSeed:'A4 C7 2F…'},
+        ex:`<span class="rt">REQ-010</span> Seed issued. Client now computes the expected key.` },
+      { msg:{t:'sys',txt:'Client computes: key = HMAC-SHA256(seed, shared_secret_calibration)'},
+        st:{cKey:'3C 9A F7 2E… (32 B)'},
+        ex:`<span class="rt">REQ-013</span> Key derivation: <b>HMAC-SHA256(seed, shared_secret)</b>. The <code>shared_secret</code> for CALIBRATION is loaded from <code>ecu_policy.json</code> — never hardcoded. Different secrets are used for each access level.` },
+      { msg:{t:'req',hex:'27 02 3C 9A F7 2E 55 01 BC 48 A6 D3 7F E2 84 C1 09 5B...',lbl:'SecurityAccess — sendKey',desc:'Subfunction 0x02. Derived HMAC-SHA256 key for CALIBRATION.'},
+        st:{cLastReq:'27 02'},
+        ex:`<span class="rt">REQ-014</span> Client sends <b>0x27 02</b> (sendKey) with the HMAC-SHA256 derived key. ECU will validate using <code>hmac.compare_digest()</code> — constant-time comparison.` },
+      { msg:{t:'resp',pos:true,hex:'67 02',lbl:'PositiveResponse — CALIBRATION granted',desc:'Key validated. CALIBRATION access level active.'},
+        st:{eA:'CALIBRATION',cA:'CALIBRATION',eSeed:'— (invalidated)',cSeed:'— (consumed)',att27:0},
+        ex:`<span class="rt">REQ-014</span><span class="rt">REQ-016</span> Key matches → <b>CALIBRATION</b> access granted. <code>hmac.compare_digest()</code> prevents timing side-channel attacks. Seed immediately invalidated (REQ-018). Attempt counter reset to 0 (REQ-040).`,
+        audit:{ev:'auth_attempt',svc:'0x27',lvl:'CALIBRATION',res:'success',nrc:'—'} },
+    ]
+  },
+  {
+    id:'tc05', icon:'🚫', title:'0x27 Wrong Key → Lockout', sub:'TC-05/09 · REQ-015,036–039',
+    reqs:['REQ-015','REQ-036','REQ-037','REQ-038','REQ-039','REQ-041'],
+    steps:[
+      { msg:{t:'sys',txt:'ECU in Extended Session. Client will send WRONG key 3 times → lockout.'},
+        st:{eS:'EXTENDED',cS:'EXTENDED',eA:'NONE',cA:'NONE',att27:0},
+        ex:`<span class="rt">REQ-036</span> Each access level has an <b>independent</b> attempt counter. Here: CALIBRATION (0x27 0x01/0x02). <code>MAX_AUTH_ATTEMPTS = 3</code>. After 3 failures: lockout for <code>LOCKOUT_DURATION_SECONDS = 3600</code>.` },
+      { msg:{t:'req',hex:'27 01',lbl:'requestSeed (attempt 1)',desc:'Client requests seed'},
+        st:{},
+        ex:`Client requests seed. Attempt counter: 0/3.` },
+      { msg:{t:'resp',pos:true,hex:'67 01 A4 C7 2F 91...',lbl:'Seed #1 issued',desc:'Fresh 32-byte seed. Attempt counter: 0/3.'},
+        st:{eSeed:'A4 C7 2F…',cSeed:'A4 C7 2F…'},
+        ex:`Seed issued. Client intentionally computes a WRONG key for this demo.` },
+      { msg:{t:'req',hex:'27 02 FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF...',lbl:'sendKey — WRONG #1',desc:'Deliberately incorrect key bytes'},
+        st:{cLastReq:'27 02 (wrong)'},
+        ex:`<span class="rt">REQ-015</span> Client sends an incorrect key. ECU runs <code>hmac.compare_digest(expected, received)</code> — mismatch.` },
+      { msg:{t:'resp',pos:false,hex:'7F 27 35',lbl:'NegativeResponse',desc:'NRC 0x35 — invalidKey. Attempt 1/3. 10 s delay timer started.'},
+        st:{att27:1,eSeed:'— (invalidated)'},
+        ex:`<span class="rt">REQ-015</span><span class="rt">REQ-038</span> <span class="nt">NRC 0x35</span> <b>invalidKey</b>. Attempt counter: <b>1/3</b>. <code>REQUIRED_DELAY_SECONDS = 10</code> timer started — any attempt within 10 s returns NRC 0x37.`,
+        audit:{ev:'auth_attempt',svc:'0x27',lvl:'CALIBRATION',res:'failure',nrc:'0x35'} },
+      { msg:{t:'req',hex:'27 01',lbl:'requestSeed (attempt 2 — after 10 s delay)',desc:'New seed required before each sendKey'},
+        st:{},
+        ex:`<span class="rt">REQ-018</span> Previous seed was invalidated on sendKey attempt. Client MUST issue a new requestSeed. (Skipping requestSeed and calling sendKey directly → NRC 0x24 requestSequenceError.)` },
+      { msg:{t:'resp',pos:true,hex:'67 01 B9 3E 55 D0...',lbl:'Seed #2 issued',desc:'New seed. Attempt counter: 1/3.'},
+        st:{eSeed:'B9 3E 55…',cSeed:'B9 3E 55…'},
+        ex:`Second seed issued. 2 attempts remaining.` },
+      { msg:{t:'req',hex:'27 02 AA BB CC DD AA BB CC DD AA BB CC DD AA BB CC DD...',lbl:'sendKey — WRONG #2',desc:'Second wrong key attempt'},
+        st:{cLastReq:'27 02 (wrong)'},
+        ex:`Second wrong key sent.` },
+      { msg:{t:'resp',pos:false,hex:'7F 27 35',lbl:'NegativeResponse',desc:'NRC 0x35 — invalidKey. Attempt 2/3.'},
+        st:{att27:2,eSeed:'— (invalidated)'},
+        ex:`<span class="rt">REQ-015</span> Attempt counter: <b>2/3</b>. One more failure will trigger full lockout.`,
+        audit:{ev:'auth_attempt',svc:'0x27',lvl:'CALIBRATION',res:'failure',nrc:'0x35'} },
+      { msg:{t:'req',hex:'27 01',lbl:'requestSeed (attempt 3)',desc:'Third and final seed request'},
+        st:{eSeed:'D2 7A 11…',cSeed:'D2 7A 11…'},
+        ex:`Third seed requested. Attempt counter: 2/3.` },
+      { msg:{t:'resp',pos:true,hex:'67 01 D2 7A 11 F6...',lbl:'Seed #3 issued',desc:'Last chance — next failure triggers lockout.'},
+        st:{},
+        ex:`Third seed issued. The next sendKey failure locks this access level for 3600 s.` },
+      { msg:{t:'req',hex:'27 02 11 22 33 44 11 22 33 44 11 22 33 44 11 22 33 44...',lbl:'sendKey — WRONG #3 → LOCKOUT',desc:'Third consecutive wrong key'},
+        st:{cLastReq:'27 02 (wrong)'},
+        ex:`<span class="rt">REQ-037</span> Third wrong key sent — this crosses <code>MAX_AUTH_ATTEMPTS = 3</code>.` },
+      { msg:{t:'resp',pos:false,hex:'7F 27 36',lbl:'NegativeResponse — LOCKED',desc:'NRC 0x36 — exceededNumberOfAttempts. Locked for 3600 s.'},
+        st:{att27:3,eLock:'3600 s',eSeed:'— (invalidated)'},
+        ex:`<span class="rt">REQ-037</span><span class="rt">REQ-039</span> <span class="nt">NRC 0x36</span> <b>exceededNumberOfAttempts</b>. CALIBRATION level locked for <code>LOCKOUT_DURATION_SECONDS = 3600 s</code>. All further attempts (even requestSeed) return NRC 0x36 until the timer expires.`,
+        audit:{ev:'lockout_triggered',svc:'0x27',lvl:'CALIBRATION',res:'failure',nrc:'0x36'} },
+      { msg:{t:'req',hex:'27 01',lbl:'requestSeed during lockout',desc:'Trying again while locked'},
+        st:{},
+        ex:`Client tries again — hoping ECU forgot. It didn't.` },
+      { msg:{t:'resp',pos:false,hex:'7F 27 36',lbl:'NegativeResponse',desc:'NRC 0x36 — still locked. Session reset does not clear lockout.'},
+        st:{},
+        ex:`<span class="rt">REQ-039</span><span class="rt">REQ-041</span> <span class="nt">NRC 0x36</span> returned again. Lockout persists across session resets — simulated ECU reset cannot bypass it. Counter is stored in the ECU's persistent HAL layer.` },
+    ]
+  },
+  {
+    id:'tc07u', icon:'🏛️', title:'0x29 Unidirectional Auth', sub:'TC-07 · REQ-025,028 → ENGINEERING',
+    reqs:['REQ-020','REQ-022','REQ-023','REQ-025','REQ-028'],
+    steps:[
+      { msg:{t:'sys',txt:'ECU in Extended Session. Beginning 0x29 unidirectional authentication for ENGINEERING access.'},
+        st:{eS:'EXTENDED',cS:'EXTENDED',eA:'NONE',cA:'NONE'},
+        ex:`<span class="rt">REQ-025</span> Unidirectional 0x29 Authentication — the <b>Tester proves identity to the ECU only</b>. Grants <b>ENGINEERING</b> access (read/write protected parameters, diagnostic mode activation). Requires Extended Session.` },
+      { msg:{t:'req',hex:'29 01 01 30 82 02 5A 30 82 01 C3 A0 03 02 01 02...',lbl:'Authentication — communicateCertificate (0x29 01)',desc:'Tester sends DER-encoded certificate (subfunction 0x01).'},
+        st:{cLastReq:'29 01'},
+        ex:`<span class="rt">REQ-020</span><span class="rt">REQ-022</span> Client sends <b>0x29 01</b> with its DER-encoded X.509 certificate. ECU will: (1) parse format, (2) verify chain to Root CA, (3) verify ECDSA P-256 signature, (4) check expiry window, (5) check CRL.` },
+      { msg:{t:'sys',txt:'ECU validates: chain → Root CA ✓ | ECDSA P-256 signature ✓ | notBefore/notAfter ✓ | CRL thumbprint not revoked ✓'},
+        st:{},
+        ex:`<span class="rt">REQ-020</span><span class="rt">REQ-022</span><span class="rt">REQ-023</span> All checks pass. ECU generates a fresh 16-byte CSPRNG nonce (<code>NONCE_SIZE_BYTES</code>) as a challenge and records it in its seen-nonce registry.` },
+      { msg:{t:'resp',pos:true,hex:'69 01 8B 2F A4 19 C7 3E 55 D0 91 F6 4A B8 22 7C E3 9D',lbl:'PositiveResponse — challenge nonce',desc:'Certificate accepted. 16-byte nonce challenge returned.'},
+        st:{eNonce:'8B 2F A4 19… (recorded)'},
+        ex:`<span class="rt">REQ-027</span> ECU returns 0x69 01 with a fresh nonce. This nonce is registered globally — reuse in any future session is permanently blocked (replay prevention).` },
+      { msg:{t:'sys',txt:'Client signs the nonce with its EC P-256 private key → ECDSA signature (64 bytes)'},
+        st:{},
+        ex:`Client uses the private key corresponding to the public key in its certificate to sign the challenge nonce. This proves key ownership without transmitting the private key.` },
+      { msg:{t:'req',hex:'29 02 30 44 02 20 1F A3 8C 7B D9 E4 22 0A 5C...',lbl:'Authentication — proofOfOwnership (0x29 02)',desc:'64-byte ECDSA P-256 signature over the ECU nonce.'},
+        st:{cLastReq:'29 02'},
+        ex:`<span class="rt">REQ-025</span> Client sends <b>0x29 02</b> with ECDSA P-256 signature over the nonce. ECU verifies signature using the public key extracted from the tester certificate.` },
+      { msg:{t:'resp',pos:true,hex:'69 02',lbl:'PositiveResponse — ENGINEERING access granted',desc:'Signature verified. ENGINEERING access level active.'},
+        st:{eA:'ENGINEERING',cA:'ENGINEERING',att29:0},
+        ex:`<span class="rt">REQ-025</span> Unidirectional auth complete. <b>ENGINEERING</b> access granted. Attempt counter reset. Access is bound to the current session token — it cannot be transferred to another session.`,
+        audit:{ev:'auth_attempt',svc:'0x29',lvl:'ENGINEERING',res:'success',nrc:'—'} },
+      { msg:{t:'req',hex:'29 FF',lbl:'Authentication — deAuthenticate (0x29 FF)',desc:'Explicit revocation of ENGINEERING access.'},
+        st:{cLastReq:'29 FF'},
+        ex:`<span class="rt">REQ-028</span> Client gracefully revokes 0x29-granted access. Session remains active — no full teardown. Client must re-authenticate to regain access.` },
+      { msg:{t:'resp',pos:true,hex:'69 FF',lbl:'PositiveResponse — deAuthenticated',desc:'ENGINEERING access revoked. Session stays in Extended.'},
+        st:{eA:'NONE',cA:'NONE'},
+        ex:`<span class="rt">REQ-028</span> <b>deAuthenticate</b> revokes only the 0x29-granted access level. Extended Session remains open. This models a clean logout without full connection teardown.`,
+        audit:{ev:'deauthenticate',svc:'0x29',lvl:'ENGINEERING',res:'success',nrc:'—'} },
+    ]
+  },
+  {
+    id:'tc07b', icon:'🤝', title:'0x29 Bidirectional Auth', sub:'TC-07 · REQ-021,026 → FULL_ACCESS',
+    reqs:['REQ-021','REQ-026','REQ-020','REQ-022','REQ-023'],
+    steps:[
+      { msg:{t:'sys',txt:'ECU in Programming Session. Beginning bidirectional 0x29 authentication for FULL_ACCESS.'},
+        st:{eS:'PROGRAMMING',cS:'PROGRAMMING',eA:'NONE',cA:'NONE'},
+        ex:`<span class="rt">REQ-026</span> <b>Bidirectional (Mutual) Authentication</b> — both Tester <em>and</em> ECU prove identity. Required for <b>FULL_ACCESS</b> (key provisioning, ECU lifecycle management). Requires Programming Session.` },
+      { msg:{t:'req',hex:'29 01 02 30 82 02 5A 30 82 01 C3...',lbl:'communicateCertificate — bidirectional request',desc:'Subfunction 0x02 signals bidirectional mode. Tester sends its cert AND requests the ECU cert.'},
+        st:{cLastReq:'29 01 (bidir)'},
+        ex:`<span class="rt">REQ-021</span> Subfunction 0x02 signals that the tester wants mutual authentication. ECU validates tester cert AND prepares to send its own certificate.` },
+      { msg:{t:'sys',txt:'ECU validates tester cert chain → PASS. Prepares ECU certificate + nonce.'},
+        st:{},
+        ex:`<span class="rt">REQ-021</span> All certificate checks pass (chain, signature, expiry, CRL). ECU retrieves its own certificate (signed by Root CA) from the simulated HAL cert store and generates a fresh nonce.` },
+      { msg:{t:'resp',pos:true,hex:'69 01 [ECU-Cert DER 600 B] [nonce 16 B] 3F A8 D2 7C...',lbl:'PositiveResponse — ECU cert + nonce',desc:'ECU presents its certificate AND challenge nonce in one response.'},
+        st:{eNonce:'3F A8 D2 7C… (recorded)'},
+        ex:`<span class="rt">REQ-021</span> ECU sends its DER certificate (Root CA → ECU Cert, ECDSA P-256) plus the nonce. Client now validates the ECU certificate chain — preventing rogue ECU substitution.` },
+      { msg:{t:'sys',txt:'Tester validates ECU certificate: chain → Root CA ✓ | ECDSA P-256 ✓ | expiry ✓'},
+        st:{},
+        ex:`Client verifies: ECU cert is signed by the trusted Root CA, signature is valid ECDSA P-256, cert is within validity window. A rogue ECU cannot forge a certificate without Root CA's private key.` },
+      { msg:{t:'req',hex:'29 02 30 44 02 20 4A B7 CC 9E 3F 12 05 D8...',lbl:'proofOfOwnership — tester signs ECU nonce',desc:'64-byte ECDSA signature over the ECU-issued nonce.'},
+        st:{cLastReq:'29 02'},
+        ex:`<span class="rt">REQ-026</span> Tester signs the ECU challenge nonce with its private key. ECU verifies this against the tester certificate's public key.` },
+      { msg:{t:'resp',pos:true,hex:'69 02',lbl:'PositiveResponse — FULL_ACCESS granted',desc:'Mutual authentication complete. Both identities verified.'},
+        st:{eA:'FULL_ACCESS',cA:'FULL_ACCESS'},
+        ex:`<span class="rt">REQ-026</span> Both identities proven. <b>FULL_ACCESS</b> granted — enables: key provisioning, security parameter write, ECU lifecycle management. The highest trust tier requiring mutual authentication to prevent rogue ECU substitution.`,
+        audit:{ev:'auth_attempt',svc:'0x29',lvl:'FULL_ACCESS',res:'success',nrc:'—'} },
+    ]
+  },
+  {
+    id:'tc11', icon:'🔁', title:'Replay Attack Detection', sub:'TC-11 · REQ-027,046',
+    reqs:['REQ-027','REQ-046'],
+    steps:[
+      { msg:{t:'sys',txt:'Attacker captured a complete 0x29 authentication exchange. Attempting replay.'},
+        st:{eS:'EXTENDED',cS:'EXTENDED',eA:'NONE',cA:'NONE'},
+        ex:`<span class="rt">REQ-046</span> Scenario: Attacker recorded a legitimate authentication session (certificate + signed proof). They now attempt to replay the same messages in a new session.` },
+      { msg:{t:'req',hex:'29 01 01 [Captured TesterCert DER...]',lbl:'Attacker replays: communicateCertificate',desc:'Replayed certificate from captured session.'},
+        st:{},
+        ex:`Attacker sends the captured certificate. The cert is still valid — it has not expired. ECU validates it successfully.` },
+      { msg:{t:'resp',pos:true,hex:'69 01 F2 3A 8C 11 44 B7 D9 2E 60 C1 55 A3 78 E4 0D 96',lbl:'ECU issues a FRESH nonce',desc:'Certificate accepted. ECU always generates a new nonce — the captured nonce is irrelevant.'},
+        st:{eNonce:'F2 3A 8C 11… (NEW, recorded)'},
+        ex:`<span class="rt">REQ-027</span> The ECU generates a <b>fresh CSPRNG nonce</b> for every authentication session. The attacker now faces a new challenge they cannot sign (no private key). But the attacker tries to replay the OLD proof anyway.` },
+      { msg:{t:'req',hex:'29 02 [CAPTURED-ECDSA-sig from old session]',lbl:'Attacker replays: proofOfOwnership — OLD signature',desc:'Signature computed over the OLD nonce. Will not verify against NEW nonce.'},
+        st:{cLastReq:'29 02 (replay)'},
+        ex:`<span class="rt">REQ-046</span> The replayed ECDSA signature was computed over the <em>old</em> nonce from the captured session. ECDSA verification against the <em>current</em> nonce will fail — different nonce, different expected signature.` },
+      { msg:{t:'resp',pos:false,hex:'7F 29 24',lbl:'NegativeResponse',desc:'NRC 0x24 — requestSequenceError. Signature does not verify against current nonce.'},
+        st:{},
+        ex:`<span class="rt">REQ-046</span> <span class="nt">NRC 0x24</span> <b>requestSequenceError</b>. Replay rejected. The fresh nonce mechanism makes every authentication session unique and non-replayable.` },
+      { msg:{t:'sys',txt:'Global nonce registry: even if attacker found the same nonce value again — it is permanently blocked.'},
+        st:{},
+        ex:`<span class="rt">REQ-027</span><span class="rt">REQ-046</span> The ECU maintains a <b>global nonce registry</b> across ALL sessions. Any nonce previously used — even in long-past sessions — is permanently rejected. Cross-session replay is impossible.` },
+    ]
+  },
+  {
+    id:'tc13', icon:'📋', title:'Audit Log Hash Chain', sub:'TC-13 · REQ-051,052,053',
+    reqs:['REQ-051','REQ-052','REQ-053'],
+    steps:[
+      { msg:{t:'sys',txt:'Demonstrating tamper-evident audit log with SHA-256 hash chain (REQ-052).'},
+        st:{},
+        ex:`<span class="rt">REQ-051</span><span class="rt">REQ-052</span><span class="rt">REQ-053</span> Every auth event and session lifecycle event produces a JSON log entry. Entry N contains <code>SHA-256(entry N-1)</code> as <code>prev_hash</code>, forming an append-only hash chain.`,
+        preloadAudit:[
+          {ev:'session_start',svc:'0x10',lvl:'—',res:'success',nrc:'—'},
+          {ev:'auth_attempt',svc:'0x27',lvl:'CALIBRATION',res:'failure',nrc:'0x35'},
+          {ev:'auth_attempt',svc:'0x27',lvl:'CALIBRATION',res:'success',nrc:'—'},
+          {ev:'session_timeout',svc:'0x10',lvl:'—',res:'timeout',nrc:'—'},
+        ] },
+      { msg:{t:'sys',txt:'4 events logged. Hash chain: each entry prev_hash = SHA-256 of the previous entry JSON.'},
+        st:{},
+        ex:`<span class="rt">REQ-052</span> Chain integrity: Entry 0's hash is computed over its own JSON. Entry 1's <code>prev_hash</code> = Entry 0's hash. Entry 2's <code>prev_hash</code> = Entry 1's hash. Modifying any entry breaks all subsequent hashes.` },
+      { msg:{t:'sys',txt:'TAMPER SIMULATION: Entry 1 "result" changed from "failure" → "success" to hide failed attempt.'},
+        st:{},
+        ex:`<span class="rt">REQ-052</span> Attacker edits the audit log to conceal a failed authentication attempt by changing <code>"result": "failure"</code> to <code>"result": "success"</code> in Entry 1.`,
+        doTamper:true },
+      { msg:{t:'sys',txt:'Chain verification: SHA-256(tampered entry 1) ≠ entry 2 prev_hash → CHAIN BROKEN from entry 1 onwards.'},
+        st:{},
+        ex:`<span class="rt">REQ-052</span> Re-computing SHA-256 of the tampered Entry 1 produces a completely different hash. Entry 2's stored <code>prev_hash</code> no longer matches. Tampering is <b>immediately detectable</b>. The chain is broken from Entry 1 downwards.` },
+    ]
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════════
+let curSc = null, curStep = -1, autoTmr = null;
+let logEntries = [], logCount = 0, tampered = false, tamperIdx = -1;
+
+const ecu = {S:'DEFAULT',A:'NONE',att27:0,att29:0,lock:'—',seed:'—',nonce:'—',timer:'300s'};
+const cli = {S:'DEFAULT',A:'NONE',lastReq:'—',seed:'—',key:'—'};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════════
+(function init(){
+  const g = document.getElementById('scGrid');
+  SCENARIOS.forEach((sc,i)=>{
+    const d = document.createElement('div');
+    d.className='sc-card'; d.id='sc_'+sc.id;
+    d.onclick=()=>selectSc(i);
+    d.innerHTML=`<div class="ic">${sc.icon}</div><div class="ttl">${sc.title}</div><div class="sub">${sc.sub}</div>`;
+    g.appendChild(d);
+  });
+  selectSc(0);
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+//  SCENARIO SELECTION
+// ═══════════════════════════════════════════════════════════════════════
+function selectSc(idx){
+  document.querySelectorAll('.sc-card').forEach(c=>c.classList.remove('active'));
+  document.getElementById('sc_'+SCENARIOS[idx].id).classList.add('active');
+  curSc = SCENARIOS[idx]; curStep = -1;
+  if(autoTmr){clearInterval(autoTmr);autoTmr=null;document.getElementById('bAuto').textContent='▶▶ Auto Play';}
+  Object.assign(ecu,{S:'DEFAULT',A:'NONE',att27:0,att29:0,lock:'—',seed:'—',nonce:'—',timer:'300s'});
+  Object.assign(cli,{S:'DEFAULT',A:'NONE',lastReq:'—',seed:'—',key:'—'});
+  tampered=false; tamperIdx=-1;
+  document.getElementById('mlist').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:120px;color:var(--muted);font-size:.85rem">Press ▶ Next Step to begin</div>';
+  showExpl(curSc.steps[0].ex, curSc.reqs);
+  buildDots(); updStep(); updUI();
+  document.getElementById('bPrev').disabled=true;
+  document.getElementById('bNext').disabled=false;
+  document.getElementById('bNext').textContent='▶ Next Step';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STEP NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════
+function stepFwd(){
+  if(!curSc) return;
+  curStep++;
+  if(curStep>=curSc.steps.length){curStep=curSc.steps.length-1;return;}
+  runStep(curStep);
+}
+function stepBack(){
+  if(!curSc||curStep<=0) return;
+  curStep--;
+  // Full replay
+  Object.assign(ecu,{S:'DEFAULT',A:'NONE',att27:0,att29:0,lock:'—',seed:'—',nonce:'—',timer:'300s'});
+  Object.assign(cli,{S:'DEFAULT',A:'NONE',lastReq:'—',seed:'—',key:'—'});
+  tampered=false; tamperIdx=-1;
+  // Apply initial state of step 0
+  if(curSc.steps[0].st) applyState(curSc.steps[0].st);
+  document.getElementById('mlist').innerHTML='';
+  // Clear log entries that came from this scenario (keep ones added before)
+  logEntries=[]; logCount=0; rendLog();
+  for(let i=0;i<=curStep;i++) runStep(i, i<curStep);
+}
+function autoPlay(){
+  if(autoTmr){clearInterval(autoTmr);autoTmr=null;document.getElementById('bAuto').textContent='▶▶ Auto Play';return;}
+  document.getElementById('bAuto').textContent='⏸ Pause';
+  autoTmr=setInterval(()=>{
+    if(!curSc||curStep>=curSc.steps.length-1){clearInterval(autoTmr);autoTmr=null;document.getElementById('bAuto').textContent='▶▶ Auto Play';return;}
+    stepFwd();
+  },1900);
+}
+function resetSc(){
+  if(autoTmr){clearInterval(autoTmr);autoTmr=null;}
+  if(curSc) selectSc(SCENARIOS.indexOf(curSc));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  RUN STEP
+// ═══════════════════════════════════════════════════════════════════════
+function runStep(idx, silent=false){
+  const s = curSc.steps[idx];
+  if(!s) return;
+  // Apply initial state for step 0 only on first actual run
+  if(idx===0 && s.st) applyState(s.st);
+  else if(s.st) applyState(s.st);
+  if(!silent){
+    if(s.msg) renderMsg(s.msg);
+    if(s.preloadAudit) s.preloadAudit.forEach(a=>addLog(a.ev,a.svc,a.lvl,a.res,a.nrc));
+    if(s.doTamper) doTamper();
+    if(s.audit) addLog(s.audit.ev,s.audit.svc,s.audit.lvl,s.audit.res,s.audit.nrc);
+    showExpl(s.ex, curSc.reqs);
+  }
+  updStep(); updDots(); updUI();
+  document.getElementById('bPrev').disabled = curStep<=0;
+  const last = curStep>=curSc.steps.length-1;
+  document.getElementById('bNext').disabled = last;
+  document.getElementById('bNext').textContent = last ? '✓ Complete' : '▶ Next Step';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════════
+function applyState(st){
+  if(st.eS!==undefined) ecu.S=st.eS;
+  if(st.eA!==undefined) ecu.A=st.eA;
+  if(st.att27!==undefined) ecu.att27=st.att27;
+  if(st.att29!==undefined) ecu.att29=st.att29;
+  if(st.eLock!==undefined) ecu.lock=st.eLock;
+  if(st.eSeed!==undefined) ecu.seed=st.eSeed;
+  if(st.eNonce!==undefined) ecu.nonce=st.eNonce;
+  if(st.eTimer!==undefined) ecu.timer=st.eTimer;
+  if(st.cS!==undefined) cli.S=st.cS;
+  if(st.cA!==undefined) cli.A=st.cA;
+  if(st.cLastReq!==undefined) cli.lastReq=st.cLastReq;
+  if(st.cSeed!==undefined) cli.seed=st.cSeed;
+  if(st.cKey!==undefined) cli.key=st.cKey;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  UI UPDATE
+// ═══════════════════════════════════════════════════════════════════════
+const SC={'DEFAULT':'def','EXTENDED':'ext','PROGRAMMING':'prg'};
+const AC={'NONE':'none','CALIBRATION':'cal','ENGINEERING':'eng','ECU_PROGRAMMING':'epr','FULL_ACCESS':'fac'};
+function updUI(){
+  sv('eSess',ecu.S, SC[ecu.S]||'def');
+  sv('cSess',cli.S, SC[cli.S]||'def');
+  sv('eAccess',ecu.A, AC[ecu.A]||'none');
+  sv('cAccess',cli.A, AC[cli.A]||'none');
+  sv('eLock',ecu.lock, ecu.lock==='—'?'ok':'lck');
+  t('eSeed',ecu.seed); t('eNonce',ecu.nonce); t('eTimer',ecu.timer);
+  t('eAudit',logCount);
+  t('cLastReq',cli.lastReq||'—'); t('cSeed',cli.seed||'—'); t('cKey',cli.key||'—');
+  t('eAtt27',ecu.att27+' / 3'); t('eAtt29',ecu.att29+' / 3');
+  updAB('27',ecu.att27, ecu.lock!=='—');
+  updAB('29',ecu.att29, false);
+}
+function sv(id,txt,cls){const e=document.getElementById(id);if(e){e.textContent=txt;e.className='sv '+(cls||'def');}}
+function t(id,val){const e=document.getElementById(id);if(e) e.textContent=val;}
+function updAB(w,cnt,lk){for(let i=0;i<3;i++){const d=document.getElementById('a'+w+'_'+i);if(d)d.className='ad'+(i<cnt?(lk?' lck':' used'):'');}}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STEP BAR
+// ═══════════════════════════════════════════════════════════════════════
+function buildDots(){
+  const b=document.getElementById('sbar'); b.innerHTML='';
+  if(!curSc) return;
+  curSc.steps.forEach((_,i)=>{const d=document.createElement('div');d.className='sd';d.id='sd'+i;b.appendChild(d);});
+}
+function updDots(){
+  if(!curSc) return;
+  curSc.steps.forEach((_,i)=>{const d=document.getElementById('sd'+i);if(d)d.className='sd'+(i<curStep?' done':i===curStep?' cur':'');});
+}
+function updStep(){
+  const tot=curSc?curSc.steps.length:0;
+  document.getElementById('stepInd').textContent=curStep<0?`0 of ${tot}`:`Step ${curStep+1} of ${tot}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  MESSAGE RENDERING
+// ═══════════════════════════════════════════════════════════════════════
+function renderMsg(m){
+  const list=document.getElementById('mlist');
+  const ph=list.querySelector('div[style]');if(ph)ph.remove();
+  const row=document.createElement('div');
+  if(m.t==='sys'){
+    row.className='mr sys';
+    row.innerHTML=`<div class="mb sys">ℹ️ ${esc(m.txt)}</div>`;
+  } else {
+    const toEcu=m.t==='req';
+    row.className='mr '+(toEcu?'toecu':'toclient');
+    const bcls=toEcu?'req':(m.pos?'pos':'neg');
+    const arr=toEcu?'→':'←';
+    const ac=toEcu?'#0D9488':(m.pos?'#1A9E6A':'#DC3545');
+    row.innerHTML=`
+      <div class="mb ${bcls}">
+        <div class="mdir">${toEcu?'CLIENT → ECU':'ECU → CLIENT'}</div>
+        <div class="mhex">${esc(m.hex)}</div>
+        <div class="mdesc"><b>${esc(m.lbl)}</b><br>${esc(m.desc)}</div>
+      </div>
+      <div class="marr" style="color:${ac}">${arr}</div>`;
+  }
+  list.appendChild(row);
+  list.scrollTop=list.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  EXPLANATION
+// ═══════════════════════════════════════════════════════════════════════
+function showExpl(html, reqs){
+  const box=document.getElementById('expl');
+  box.innerHTML=html;
+  if(reqs&&reqs.length){
+    const d=document.createElement('div');d.className='rchips';
+    reqs.forEach(r=>{const s=document.createElement('span');s.className='rchip';s.textContent=r;d.appendChild(s);});
+    box.appendChild(d);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AUDIT LOG
+// ═══════════════════════════════════════════════════════════════════════
+function addLog(ev,svc,lvl,res,nrc){
+  const prev=logEntries.length?sh(JSON.stringify(logEntries[logEntries.length-1])):'0000000000000000';
+  const raw={idx:logEntries.length,ts:fakeTs(logEntries.length),event:ev,service_id:svc,access_level:lvl,client_id:'tester-01',result:res,nrc_code:nrc,prev_hash:prev};
+  raw.hash=sh(JSON.stringify(raw));
+  logEntries.push({...raw,_tampered:false,_origHash:raw.hash});
+  logCount++;
+  rendLog();
+}
+function doTamper(){
+  if(tamperIdx<0&&logEntries.length>1){
+    tamperIdx=Math.min(1,logEntries.length-2);
+    const e=logEntries[tamperIdx];
+    e.result='success'; e._tampered=true; tampered=true;
+    // Recompute hash (will differ)
+    const cp={...e}; delete cp._tampered; delete cp._origHash;
+    e.hash=sh(JSON.stringify(cp))+'tamper';
+    rendLog();
+  }
+}
+function rendLog(){
+  const b=document.getElementById('alogBody');
+  if(!logEntries.length){
+    b.innerHTML='<div style="padding:18px;color:#64748B;font-family:monospace;font-size:.75rem;text-align:center">— log entries appear as authentication events occur —</div>';
+    return;
+  }
+  // Find first broken index
+  const firstBroken = tamperIdx>=0 ? tamperIdx : -1;
+  b.innerHTML=logEntries.map((e,i)=>{
+    const isTampered=e._tampered;
+    const isBroken=firstBroken>=0&&i>firstBroken;
+    const bg=isTampered?'background:#2D1810;border-left:3px solid #EF4444;':isBroken?'background:#1B1828;border-left:3px solid #8B5CF6;':'';
+    const rc=e.result==='success'||e.result==='timeout'?'#86EFAC':'#FCA5A5';
+    const hashColor=isBroken?'#FC8181':'#C084FC';
+    const hashNote=isBroken&&!isTampered?' ⚠️ BROKEN':'';
+    const tamperNote=isTampered?' ⚠️ TAMPERED':'';
+    return `<div class="le" style="${bg}">`
+      +`<span class="lbr">{</span>\n`
+      +`  <span class="lf">"idx"</span>: <span class="lv">${e.idx}</span>,\n`
+      +`  <span class="lf">"timestamp"</span>: <span class="lv ts">"${e.ts}"</span>,\n`
+      +`  <span class="lf">"event"</span>: <span class="lv">"${e.event}"</span>,\n`
+      +`  <span class="lf">"service_id"</span>: <span class="lv">"${e.service_id}"</span>,\n`
+      +`  <span class="lf">"access_level"</span>: <span class="lv">"${e.access_level}"</span>,\n`
+      +`  <span class="lf">"client_id"</span>: <span class="lv">"${e.client_id}"</span>,\n`
+      +`  <span class="lf">"result"</span>: <span style="color:${rc}">"${e.result}"${tamperNote}</span>,\n`
+      +`  <span class="lf">"nrc_code"</span>: <span class="lv${e.nrc_code!=='—'?' bad':''}">"${e.nrc_code}"</span>,\n`
+      +`  <span class="lf">"prev_hash"</span>: <span class="lhash">"${e.prev_hash.substring(0,16)}…"</span>,\n`
+      +`  <span class="lf">"hash"</span>: <span style="color:${hashColor}">"${e.hash.substring(0,16)}…"${hashNote}</span>\n`
+      +`<span class="lbr">}</span>${i<logEntries.length-1?',':''}</div>`;
+  }).join('');
+  b.scrollTop=b.scrollHeight;
+}
+function clearLog(){logEntries=[];logCount=0;tampered=false;tamperIdx=-1;t('eAudit','0');rendLog();}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════════════
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fakeTs(i){const h=10+Math.floor(i/4),m=String((i*7)%60).padStart(2,'0');return `2026-06-04T${String(h).padStart(2,'0')}:${m}:00Z`;}
+function sh(s){
+  // Simulated hash (FNV-1a) — display only, not cryptographic
+  let h=2166136261;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=(h*16777619)>>>0;}
+  let x=h.toString(16).padStart(8,'0');
+  // Make it look SHA-256-ish (64 hex chars)
+  return (x+x+x+x+x+x+x+x).substring(0,64);
+}
+</script>
+</body>
+</html>
