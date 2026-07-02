@@ -82,7 +82,7 @@ secure-access-lab/
 │   └── secure_access_monitor.html   ← live dashboard (WebSocket client, real data)
 ├── specs/
 │   ├── requirements.csv             ← 53 requirements (REQ-001 to REQ-053) [added to .gitignore]
-│   └── test_cases.csv               ← 13 test cases with REQ traceability [added to .gitignore]
+│   └── test_cases.csv               ← 13 test cases with REQ traceability
 ├── sim/
 │   ├── hal/
 │   │   ├── crypto_backend.py        ← HAL crypto gateway (HMAC-SHA256, ECDSA P-256, X.509)
