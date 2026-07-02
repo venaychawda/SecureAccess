@@ -61,9 +61,10 @@ python -m sim.protocol.uds_server
 # then open gui/secure_access_monitor.html in a browser
 ```
 
-> `docs\demo.html` at the repo are static, JS-only
-> mockups with fake/hardcoded data (no backend). They are kept for early
-> visual reference only — use `gui/secure_access_monitor.html` via the
+> **[▶ Live Demo](https://venaychawda.github.io/SecureAccess/)** at the repo {docs\index.html} are static, JS-only for a quick look of GUI
+> mockups with fake/hardcoded data (no backend). They are kept for early visual reference only
+
+> — use `gui/secure_access_monitor.html` via the
 > launcher for an actual working demonstration.
 
 ---
