@@ -1,4 +1,4 @@
-# secure-access-lab
+# SecureAccess
 
 Spec-driven, test-driven simulation of UDS diagnostic access security on a Virtual ECU.
 
@@ -10,6 +10,7 @@ Implements and validates all three UDS access mechanisms defined in ISO 14229-1:
 
 **Phase 1 only** — Pure Python simulation. No hardware required.
 
+ [▶ Live Demo](https://venaychawda.github.io/SecureAccess/)
 ---
 
 ## Prerequisites
